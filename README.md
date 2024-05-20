@@ -1,6 +1,6 @@
-# dotfiles
+# Volkan Cicek's Dotfiles
 
-My personal dotfiles
+This repository contains my personal dotfiles and scripts for setting up my development environment.
 
 ## PowerShell setup (Windows)
 
