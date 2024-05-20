@@ -35,3 +35,15 @@ And create the corresponding `.gitconfig-personal` and `.gitconfig-work` files i
     name = Your Name
     email = Your Email
 ```
+
+# Programs
+
+List of programs that I use on my personal computer:
+
+- A desktop application for viewing and analyzing tabular data [Tad](https://github.com/antonycourtney/tad)
+- Control display brightness & volume on Mac: [Monitor Control](https://github.com/MonitorControl/MonitorControl)
+- Mac system monitor in menu bar: [Stats](https://github.com/exelban/stats)
+- A desktop application for downloading Udemy Courses [Udeler](https://github.com/heliomarpm/udemy-downloader-gui)
+- [Awesome Mac](https://github.com/jaywcjlove/awesome-mac)
+- [Config (macOS / iOS)](https://github.com/nikitavoloboev/config)
+- [Awesome Linux Software](https://github.com/luong-komorebi/Awesome-Linux-Software)
