@@ -714,8 +714,3 @@ Set-PSReadLineKeyHandler -Key Alt+a `
     [Microsoft.PowerShell.PSConsoleReadLine]::SetMark($null, $null)
     [Microsoft.PowerShell.PSConsoleReadLine]::SelectForwardChar($null, ($nextAst.Extent.EndOffset - $nextAst.Extent.StartOffset) - $endOffsetAdjustment)
 }
-
-#34de4b3d-13a8-4540-b76d-b9e8d3851756 PowerToys CommandNotFound module
-
-Import-Module "C:\Users\volkan.cicek\AppData\Local\PowerToys\WinUI3Apps\..\WinGetCommandNotFound.psd1"
-#34de4b3d-13a8-4540-b76d-b9e8d3851756
