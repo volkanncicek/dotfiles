@@ -1,0 +1,49 @@
+# `ve`: Virtual Environment Manager
+# 
+# This script helps manage Python virtual environments. It creates, activates, 
+# and upgrades pip within a virtual environment. If you are already inside a 
+# virtual environment, it provides relevant information.
+#
+# Logical Flow:
+# 0. If not already inside a virtual environment:
+#    0.1. If the specified virtual environment exists, activate it.
+#    0.2. If it does not exist, create it with global site packages, update pip, 
+#         and then activate it.
+# 1. If already inside a virtual environment, it will simply inform you.
+#
+# Usage:
+# - Without arguments: creates a virtual environment named `.venv` using Python 3.10.
+#   Example: 
+#     $ ve
+#
+# - With a specific Python version:
+#   Example: 
+#     $ ve python3.11
+#
+# - With a specific Python version and environment name:
+#   Example: 
+#     $ ve python3.11 ./.venv-diff
+
+ve() {
+    local py=${1:-python3.10}
+    local venv="${2:-./.venv}"
+
+    local bin="${venv}/bin/activate"
+
+    # Check if not already in a virtual environment
+    if [ -z "${VIRTUAL_ENV}" ]; then
+        if [ ! -d ${venv} ]; then
+            echo "Creating and activating virtual environment: ${venv}"
+            ${py} -m venv ${venv} --system-site-packages
+            echo "export PYTHON=${py}" >> ${bin}  # Set the PYTHON variable in the environment
+            source ${bin}
+            echo "Upgrading pip..."
+            ${py} -m pip install --upgrade pip
+        else
+            echo "Virtual environment ${venv} already exists. Activating..."
+            source ${bin}
+        fi
+    else
+        echo "Already inside a virtual environment!"
+    fi
+}
