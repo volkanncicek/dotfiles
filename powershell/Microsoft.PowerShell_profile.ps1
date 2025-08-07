@@ -471,7 +471,7 @@ Set-PSReadLineKeyHandler -Key Alt+F -Function SelectShellForwardWord
 # SECTION 9: SMART INSERT/DELETE FUNCTIONS
 # =============================================================================
 
-# Smart quote insertion
+# Enhanced Smart Quote Insertion with Paste Mode Support
 Set-PSReadLineKeyHandler -Key '"', "'" `
     -BriefDescription SmartInsertQuote `
     -LongDescription "Insert paired quotes if not already on a quote" `
@@ -488,10 +488,35 @@ Set-PSReadLineKeyHandler -Key '"', "'" `
     $cursor = $null
     [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
 
+    # Check if we're in paste mode (recently pasted content)
+    $isPasteMode = $false
+    if ($global:LastPasteTime -and (Get-Date) -lt $global:LastPasteTime.AddSeconds(2)) {
+        $isPasteMode = $true
+    }
+
     # If text is selected, just quote it without any smarts
     if ($selectionStart -ne -1) {
         [Microsoft.PowerShell.PSConsoleReadLine]::Replace($selectionStart, $selectionLength, $quote + $line.Substring($selectionStart, $selectionLength) + $quote)
         [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($selectionStart + $selectionLength + 2)
+        return
+    }
+
+    # If in paste mode, just insert the quote without smart features
+    if ($isPasteMode) {
+        [Microsoft.PowerShell.PSConsoleReadLine]::Insert($quote)
+        return
+    }
+
+    # Check if we're at the end of a line (common when pasting)
+    if ($cursor -eq $line.Length) {
+        # Simple insertion for end-of-line
+        [Microsoft.PowerShell.PSConsoleReadLine]::Insert($quote)
+        return
+    }
+
+    # Check if the next character is already a quote (common in pasted code)
+    if ($cursor -lt $line.Length -and $line[$cursor] -eq $quote) {
+        [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($cursor + 1)
         return
     }
 
@@ -810,7 +835,42 @@ Set-PSReadLineKeyHandler -Key F1 `
 }
 
 # =============================================================================
-# SECTION 11: COMMAND VALIDATION AND AUTO-CORRECTION
+# SECTION 11: PASTE DETECTION AND SMART FEATURES
+# =============================================================================
+
+# Global variable to track paste operations
+$global:LastPasteTime = $null
+
+# Override the default paste behavior to detect paste operations
+Set-PSReadLineKeyHandler -Key Ctrl+V `
+    -BriefDescription PasteWithDetection `
+    -LongDescription "Paste with smart feature detection" `
+    -ScriptBlock {
+    param($key, $arg)
+    
+    # Record the paste time
+    $global:LastPasteTime = Get-Date
+    
+    # Perform the default paste operation
+    [Microsoft.PowerShell.PSConsoleReadLine]::Paste($key, $arg)
+}
+
+# Also detect Shift+Insert paste
+Set-PSReadLineKeyHandler -Key Shift+Insert `
+    -BriefDescription PasteWithDetection `
+    -LongDescription "Paste with smart feature detection" `
+    -ScriptBlock {
+    param($key, $arg)
+    
+    # Record the paste time
+    $global:LastPasteTime = Get-Date
+    
+    # Perform the default paste operation
+    [Microsoft.PowerShell.PSConsoleReadLine]::Paste($key, $arg)
+}
+
+# =============================================================================
+# SECTION 12: COMMAND VALIDATION AND AUTO-CORRECTION
 # =============================================================================
 
 # Auto correct 'git cmt' to 'git commit'
@@ -1028,6 +1088,13 @@ function Show-MyAliases {
     Get-Command -CommandType Function | Where-Object { $_.Module -eq $null } | Select-Object Name, Source | Format-Table -AutoSize
 }
 
+# Function to temporarily disable smart features for pasting
+function Disable-SmartFeatures {
+    Write-Host "Smart features disabled for 5 seconds..." -ForegroundColor Yellow
+    $global:LastPasteTime = (Get-Date).AddSeconds(5)
+}
+Set-Alias -Name nosmart -Value Disable-SmartFeatures
+
 # Set aliases for utility functions
 Set-Alias -Name profile-info -Value Show-ProfileInfo
 Set-Alias -Name reload -Value Update-Profile
@@ -1046,6 +1113,7 @@ if (-not $global:ProfileLoaded) {
     Write-Host "Type 'reload' to reload the profile" -ForegroundColor Yellow
     Write-Host "Type 'backup-profile' to backup the profile" -ForegroundColor Yellow
     Write-Host "Type 'snv' to set Node version for current directory" -ForegroundColor Yellow
+    Write-Host "Type 'nosmart' to disable smart features for 5 seconds (for pasting)" -ForegroundColor Yellow
     Write-Host "Key Shortcuts: Ctrl+b (build), Alt+x (Unicode), Ctrl+Shift+V (here string)" -ForegroundColor Cyan
     Write-Host "=========================================" -ForegroundColor Green
     $global:ProfileLoaded = $true
