@@ -31,9 +31,6 @@
     === History & Navigation ===
     F7                      Show command history in grid view
     UpArrow/DownArrow      History search with cursor positioning
-    Ctrl+Shift+J + key     Mark current directory
-    Ctrl+J + key           Jump to marked directory
-    Alt+J                  Show all directory marks
 
     === Editing & Transformation ===
     F1                     Get help for current command
@@ -88,14 +85,12 @@
     To edit this profile: code $PROFILE
     
     CHANGELOG v1.1:
-    - Fixed Ctrl+Shift+J vs Ctrl+J key binding conflict for directory marking
     - Fixed undefined $OMPThemePath variable in Show-ProfileInfo
     - Replaced hardcoded function list with dynamic detection
     - Unified virtual environment activation logic (DRY principle)
     - Added Set-NodeVersion function for explicit Node version management
     - Renamed ping alias to psping to avoid conflicts
     - Added community module suggestions (z, PSFzf)
-    - Improved user feedback in directory marking functions
     - Micro-optimization: Moved FindToken helper function outside key handler (performance improvement)
 #>
 
@@ -343,9 +338,26 @@ function Set-NodeVersion {
         Write-Host "fnm is not installed or not in your PATH." -ForegroundColor Red
         return
     }
-    fnm use
-    # After setting the version, apply the environment changes
-    fnm env --shell powershell | Invoke-Expression
+    
+    # Check if .node-version file exists
+    if (Test-Path ".node-version") {
+        # Set the Node version for current directory
+        fnm use
+        
+        # Then apply the environment changes
+        $envOutput = fnm env --shell powershell
+        if ($envOutput) {
+            $envOutput | Invoke-Expression
+            Write-Host "Node version environment updated." -ForegroundColor Green
+        } else {
+            Write-Host "Failed to update Node environment." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "No .node-version file found in current directory." -ForegroundColor Yellow
+        Write-Host "Available Node versions:" -ForegroundColor Cyan
+        fnm list
+        Write-Host "`nTo set a Node version, use: fnm use <version>" -ForegroundColor Cyan
+    }
 }
 Set-Alias snv Set-NodeVersion
 
@@ -798,64 +810,7 @@ Set-PSReadLineKeyHandler -Key F1 `
 }
 
 # =============================================================================
-# SECTION 11: DIRECTORY MARKING SYSTEM
-# =============================================================================
-
-# Global variable for directory marks
-$global:PSReadLineMarks = @{}
-
-# Ctrl+Shift+J - Mark current directory
-Set-PSReadLineKeyHandler -Key Ctrl+Shift+J `
-    -BriefDescription MarkDirectory `
-    -LongDescription "Mark the current directory" `
-    -ScriptBlock {
-    param($key, $arg)
-
-    # Prompt for a single key to use as the mark
-    Write-Host "Marking directory. Press a key for the mark: " -NoNewline
-    $key = [Console]::ReadKey($true)
-    Write-Host $key.KeyChar -ForegroundColor Yellow
-    $global:PSReadLineMarks[$key.KeyChar] = $pwd.Path
-}
-
-# Ctrl+j - Jump to marked directory
-Set-PSReadLineKeyHandler -Key Ctrl+j `
-    -BriefDescription JumpDirectory `
-    -LongDescription "Goto the marked directory" `
-    -ScriptBlock {
-    param($key, $arg)
-
-    # Prompt for the mark key to jump to
-    Write-Host "Jump to mark: " -NoNewline
-    $key = [Console]::ReadKey($true)
-    Write-Host $key.KeyChar -ForegroundColor Yellow
-    $dir = $global:PSReadLineMarks[$key.KeyChar]
-    if ($dir) {
-        Set-Location $dir
-        [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
-    } else {
-        Write-Host "`nMark '$($key.KeyChar)' not found." -ForegroundColor Red
-        [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
-    }
-}
-
-# Alt+j - Show directory marks
-Set-PSReadLineKeyHandler -Key Alt+j `
-    -BriefDescription ShowDirectoryMarks `
-    -LongDescription "Show the currently marked directories" `
-    -ScriptBlock {
-    param($key, $arg)
-
-    $global:PSReadLineMarks.GetEnumerator() | ForEach-Object {
-        [pscustomobject]@{ Key = $_.Key; Dir = $_.Value }
-    } |
-        Format-Table -AutoSize | Out-Host
-
-    [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
-}
-
-# =============================================================================
-# SECTION 12: COMMAND VALIDATION AND AUTO-CORRECTION
+# SECTION 11: COMMAND VALIDATION AND AUTO-CORRECTION
 # =============================================================================
 
 # Auto correct 'git cmt' to 'git commit'
@@ -1092,7 +1047,6 @@ if (-not $global:ProfileLoaded) {
     Write-Host "Type 'backup-profile' to backup the profile" -ForegroundColor Yellow
     Write-Host "Type 'snv' to set Node version for current directory" -ForegroundColor Yellow
     Write-Host "Key Shortcuts: Ctrl+b (build), Alt+x (Unicode), Ctrl+Shift+V (here string)" -ForegroundColor Cyan
-    Write-Host "Directory Marks: Ctrl+Shift+J (mark), Ctrl+J (jump), Alt+J (list)" -ForegroundColor Cyan
     Write-Host "=========================================" -ForegroundColor Green
     $global:ProfileLoaded = $true
 }
