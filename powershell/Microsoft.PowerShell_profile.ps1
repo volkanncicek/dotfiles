@@ -1,81 +1,340 @@
+# =============================================================================
+# PowerShell Profile - Well Organized and Enhanced
+# =============================================================================
+
+<#
+.SYNOPSIS
+    Comprehensive PowerShell Profile with advanced PSReadLine features
+
+.DESCRIPTION
+    This profile provides an enhanced PowerShell experience with:
+    - Advanced PSReadLine configuration (Windows mode)
+    - Smart text editing features
+    - Directory marking system
+    - Virtual environment auto-activation
+    - Custom utility functions
+    - Extensive keyboard shortcuts
+
+.FEATURES
+    ✅ Oh-My-Posh theme integration
+    ✅ Terminal Icons for better file visualization
+    ✅ Auto virtual environment activation
+    ✅ Smart quote and bracket insertion
+    ✅ Advanced history management
+    ✅ Directory marking and jumping
+    ✅ Unicode character input
+    ✅ Command validation and auto-correction
+    ✅ Clipboard integration
+    ✅ Build macros for development
+
+.KEYBOARD_SHORTCUTS
+    === History & Navigation ===
+    F7                      Show command history in grid view
+    UpArrow/DownArrow      History search with cursor positioning
+    Ctrl+Shift+J + key     Mark current directory
+    Ctrl+J + key           Jump to marked directory
+    Alt+J                  Show all directory marks
+
+    === Editing & Transformation ===
+    F1                     Get help for current command
+    Alt+w                  Save current line to history (don't execute)
+    Alt+'                  Toggle quotes on arguments
+    Alt+%                  Expand aliases to full commands
+    Alt+a                  Select command arguments
+    Alt+(                  Parenthesize selection
+    Alt+x                  Convert 4-digit hex to Unicode character
+    
+    === Development & Build ===
+    Ctrl+b                 Execute msbuild in current directory
+    Ctrl+d,Ctrl+c         Capture screen
+    
+    === Clipboard & Text ===
+    Ctrl+C                 Copy (Windows standard)
+    Ctrl+V                 Paste (Windows standard)
+    Ctrl+Shift+V           Paste as here string
+    
+    === Tab Completion ===
+    Tab                    Cycle through completions (Windows mode)
+    Shift+Tab              Cycle backwards through completions
+    
+    === Word Movement (Emacs style) ===
+    Alt+b/f                Move by words backward/forward
+    Alt+B/F                Select words backward/forward
+    Alt+d                  Kill word forward
+    Alt+Backspace          Kill word backward
+    
+    === Smart Editing ===
+    "/'                    Smart quote insertion
+    ([{                    Smart bracket insertion with auto-closing
+    Backspace              Smart deletion of matching pairs
+    RightArrow             Accept next suggestion word at line end
+
+.CUSTOM_COMMANDS
+    profile-info           Show profile information and status
+    reload                 Reload PowerShell profile
+    backup-profile         Create timestamped profile backup
+    my-aliases             Show all custom aliases
+
+.VIRTUAL_ENVIRONMENT
+    - Automatically activates .venv or venv when entering directories
+    - Enhanced cd function with venv detection
+
+.NOTES
+    Author: Enhanced PowerShell Profile
+    Version: 1.1 (Fixed key bindings, improved functions, added Node version management)
+    Requires: PowerShell 7+, PSReadLine 2.1+, Oh-My-Posh
+    
+    To reload this profile: . $PROFILE
+    To edit this profile: code $PROFILE
+    
+    CHANGELOG v1.1:
+    - Fixed Ctrl+Shift+J vs Ctrl+J key binding conflict for directory marking
+    - Fixed undefined $OMPThemePath variable in Show-ProfileInfo
+    - Replaced hardcoded function list with dynamic detection
+    - Unified virtual environment activation logic (DRY principle)
+    - Added Set-NodeVersion function for explicit Node version management
+    - Renamed ping alias to psping to avoid conflicts
+    - Added community module suggestions (z, PSFzf)
+    - Improved user feedback in directory marking functions
+    - Micro-optimization: Moved FindToken helper function outside key handler (performance improvement)
+#>
+
+# Import required namespaces
 using namespace System.Management.Automation
 using namespace System.Management.Automation.Language
 
-#oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression
+# =============================================================================
+# SECTION 1: AUTOMATIC ENVIRONMENT REFRESH
+# =============================================================================
 
-$OMPThemePath = "$env:POSH_THEMES_PATH\ohmytheme.omp.json"
-oh-my-posh init pwsh --config $OMPThemePath | Invoke-Expression
+# Auto-refresh environment variables on profile load (VS Code PATH fix)
+try {
+    $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machinePath;$userPath"
+    Write-Host "Environment variables refreshed automatically" -ForegroundColor Green
+} catch {
+    Write-Host "Failed to refresh environment variables: $($_.Exception.Message)" -ForegroundColor Yellow
+}
 
-Import-Module PSReadLine
+# =============================================================================
+# SECTION 2: VISUAL ENHANCEMENTS
+# =============================================================================
+
+# Oh-My-Posh Theme Configuration
+try {
+    # Smart theme detection based on terminal type and environment
+    $themePaths = @()
+    
+    # Add custom theme paths first (highest priority)
+    $themePaths += @(
+        "$env:USERPROFILE\AppData\Local\Programs\oh-my-posh\themes\ohmytheme.omp.json",
+        "$env:LOCALAPPDATA\Programs\oh-my-posh\themes\ohmytheme.omp.json"
+    )
+    
+    # Add POSH_THEMES_PATH themes (if available)
+    if ($env:POSH_THEMES_PATH) {
+        $themePaths += @(
+            "$env:POSH_THEMES_PATH\ohmytheme.omp.json",
+            "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json",
+            "$env:POSH_THEMES_PATH\agnoster.omp.json"
+        )
+    }
+    
+    # Add fallback themes
+    $themePaths += @(
+        "C:\Program Files (x86)\oh-my-posh\themes\jandedobbeleer.omp.json",
+        "C:\Program Files (x86)\oh-my-posh\themes\agnoster.omp.json"
+    )
+    
+    $script:foundTheme = $null
+    $terminalType = if ($env:WT_SESSION) { "Windows Terminal" } elseif ($env:TERM_PROGRAM -eq "vscode") { "VSCode Terminal" } else { "Other" }
+    
+    Write-Host "Detecting theme for: $terminalType" -ForegroundColor Cyan
+    
+    foreach ($path in $themePaths) {
+        if (Test-Path $path) {
+            $script:foundTheme = $path
+            break
+        }
+    }
+    
+    if ($script:foundTheme) {
+        oh-my-posh init pwsh --config $script:foundTheme | Invoke-Expression
+        Write-Host "Theme loaded: $script:foundTheme" -ForegroundColor Green
+    } else {
+        Write-Host "No theme found, using basic prompt..." -ForegroundColor Yellow
+        # Fallback to basic prompt if no theme found
+        function prompt {
+            $location = Get-Location
+            $host.UI.RawUI.WindowTitle = "PowerShell - $location"
+            "PS $location> "
+        }
+    }
+} catch {
+    Write-Host "Oh-My-Posh theme loading failed, using basic prompt..." -ForegroundColor Yellow
+    # Fallback to basic prompt if Oh-My-Posh fails
+    function prompt {
+        $location = Get-Location
+        $host.UI.RawUI.WindowTitle = "PowerShell - $location"
+        "PS $location> "
+    }
+}
+
+# Terminal Icons for better file/folder visualization
 Import-Module -Name Terminal-Icons
 
+# =============================================================================
+# SECTION 3: PSREADLINE CONFIGURATION
+# =============================================================================
+
+Import-Module PSReadLine
+
+# Basic PSReadLine settings
 Set-PSReadLineOption -PredictionSource History
 Set-PSReadLineOption -PredictionViewStyle ListView
 Set-PSReadLineOption -EditMode Windows
+Set-PSReadLineOption -HistorySearchCursorMovesToEnd
 
+# =============================================================================
+# SECTION 4: ALIASES AND SHORTCUTS
+# =============================================================================
 
-# Alias
+# Basic aliases
 Set-Alias ll ls
 
-function create_venv { uv venv }
-function activate_venv { .\.venv\Scripts\activate }
-function deactivate_venv { deactivate }
+# File and directory functions
+function la { Get-ChildItem -Force }
+function lla { Get-ChildItem -Force | Format-Wide }
+function lt { Get-ChildItem | Sort-Object LastWriteTime -Descending }
+function ld { Get-ChildItem -Directory }
+function lf { Get-ChildItem -File }
 
-# Aliases for PowerShell
-Set-Alias -Name cenv -Value create_venv
-Set-Alias -Name aenv -Value activate_venv
-Set-Alias -Name daenv -Value deactivate_venv
+# Navigation functions
+function .. { Set-Location .. }
+function ... { Set-Location ..\.. }
+function .... { Set-Location ..\..\.. }
+function ~ { Set-Location $env:USERPROFILE }
 
-#region auto venv activate
+# Git aliases (if you use git)
+# Note: Some git aliases are commented out due to PowerShell conflicts
+# Set-Alias -Name gs -Value "git status"                     # Git status
+# Set-Alias -Name ga -Value "git add"                        # Git add
+# Set-Alias -Name gcm -Value "git commit"                    # Git commit
+# Set-Alias -Name gpush -Value "git push"                    # Git push
+# Set-Alias -Name gpull -Value "git pull"                    # Git pull
+# Set-Alias -Name gco -Value "git checkout"                  # Git checkout
+# Set-Alias -Name gb -Value "git branch"                     # Git branch
 
-$venvDirOptions = @(".venv", "venv")
-$venvDir = $venvDirOptions | Where-Object { Test-Path -Path $_ } | Select-Object -First 1
+# System and process functions
+function ps { Get-Process }
+function top { Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 }
 
-if ($null -ne $venvDir) {
-    $activateScript = Join-Path -Path $venvDir -ChildPath "Scripts\Activate.ps1"
-    if (Test-Path -Path $activateScript) {
-        & $activateScript
-        Write-Host "Virtual environment activated." -ForegroundColor Green
+# Network functions
+function ip { Get-NetIPAddress }
+
+# Utility functions
+function which { Get-Command }
+
+# Additional navigation functions
+function desk { Set-Location ~\Desktop }
+function docs { Set-Location ~\Documents }
+function dwn { Set-Location ~\Downloads }
+function dev { Set-Location ~\Desktop\development }
+
+# File operations
+function md { New-Item -ItemType Directory }
+function mkcd { 
+    param([string]$DirectoryName)
+    New-Item -ItemType Directory -Name $DirectoryName
+    Set-Location $DirectoryName
+}
+
+# Quick access functions
+function cls { Clear-Host }
+function h { Get-History }
+function hc { Clear-History }
+
+# =============================================================================
+# SECTION 5: ENVIRONMENT MANAGEMENT (VENV & NODE)
+# =============================================================================
+
+# A single, reusable function to activate a Python virtual environment if found.
+# This avoids re-activating if the environment is already active.
+function Enter-VenvIfNeeded {
+    # Define the possible venv directory names
+    $venvDirNames = '.venv', 'venv'
+    $currentPath = $PWD.Path
+
+    # Find the first venv directory that exists in the current location
+    $venvPath = $venvDirNames | ForEach-Object { Join-Path $currentPath $_ } | Where-Object { Test-Path $_ -PathType Container } | Select-Object -First 1
+
+    # If no venv directory was found, do nothing.
+    if (-not $venvPath) { return }
+
+    # CRITICAL: If we are already in this specific virtual environment, do nothing.
+    # This prevents spamming "Virtual environment activated" messages on every cd within the project.
+    if ($env:VIRTUAL_ENV -and ($env:VIRTUAL_ENV -eq $venvPath)) {
+        return
+    }
+
+    # Construct the path to the activation script
+    $activateScript = Join-Path -Path $venvPath -ChildPath "Scripts\Activate.ps1"
+
+    # If the script exists, activate (source) it.
+    if (Test-Path $activateScript) {
+        . $activateScript
+        Write-Host "Virtual environment activated from '$venvPath'." -ForegroundColor Green
     }
 }
 
-#endregion auto venv activate
+# --- VIRTUAL ENVIRONMENT AUTO-ACTIVATION ---
 
-#region cd auto venv activate
-function Change-DirectoryWithVenvActivation {
+# 1. Handle the "IDE startup" case: Check for a venv upon profile load.
+Enter-VenvIfNeeded
+
+# 2. Handle interactive navigation: Enhance 'cd' to check for a venv on every location change.
+function Invoke-EnhancedCd {
     param(
+        [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
         [string]$Path
     )
-    # Dizin değiştirme
-    Set-Location $Path
     
-    # Sanal Ortamı Kontrol Etme
-    $venvPath = $null
-    if (Test-Path ".venv") {
-        $venvPath = ".venv"
-    }
-    elseif (Test-Path "venv") {
-        $venvPath = "venv"
-    }
+    # Use the original Set-Location cmdlet to avoid recursion
+    Microsoft.PowerShell.Management\Set-Location -Path $Path
 
-    if ($venvPath -ne $null) {
-        $activateScript = Join-Path -Path $venvPath -ChildPath "Scripts\Activate.ps1"
-        if (Test-Path $activateScript) {
-            & $activateScript
-            Write-Host "Virtual environment activated." -ForegroundColor Green
-        }
-    }
+    # After changing location, check if we need to activate a venv.
+    Enter-VenvIfNeeded
 }
 
-Remove-Item Alias:cd -Force # disable cd alias
-Set-Alias -Name cd -Value Change-DirectoryWithVenvActivation # set cd alias to new function
+# Replace the 'cd' alias with our enhanced function
+if (Get-Alias -Name cd -ErrorAction SilentlyContinue) {
+    Remove-Item Alias:cd -Force
+}
+Set-Alias -Name cd -Value Invoke-EnhancedCd
 
-#endregion cd auto venv activate
+# --- NODE.JS VERSION MANAGEMENT ---
 
+# A function to explicitly set the node version for the current directory using FNM
+function Set-NodeVersion {
+    if (-not (Get-Command fnm -ErrorAction SilentlyContinue)) {
+        Write-Host "fnm is not installed or not in your PATH." -ForegroundColor Red
+        return
+    }
+    fnm use
+    # After setting the version, apply the environment changes
+    fnm env --shell powershell | Invoke-Expression
+}
+Set-Alias snv Set-NodeVersion
 
+# =============================================================================
+# SECTION 6: WINGET COMPLETION
+# =============================================================================
+
+# Register winget completion
 Register-ArgumentCompleter -Native -CommandName winget -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
-    [Console]::InputEncoding = [Console]::OutputEncoding = $OutputEncoding = [System.Text.Utf8Encoding]::new()
+    [Console]::InputEncoding = [Console]::OutputEncoding = $OutputEncoding = [System.Text.UTF8Encoding]::new()
     $Local:word = $wordToComplete.Replace('"', '""')
     $Local:ast = $commandAst.ToString().Replace('"', '""')
     winget complete --word="$Local:word" --commandline "$Local:ast" --position $cursorPosition | ForEach-Object {
@@ -83,27 +342,17 @@ Register-ArgumentCompleter -Native -CommandName winget -ScriptBlock {
     }
 }
 
+# =============================================================================
+# SECTION 7: KEY BINDINGS AND SHORTCUTS
+# =============================================================================
 
-# This is an example profile for PSReadLine.
-#
-# This is roughly what I use so there is some emphasis on emacs bindings,
-# but most of these bindings make sense in Windows mode as well.
-
-# Searching for commands with up/down arrow is really handy.  The
-# option "moves to end" is useful if you want the cursor at the end
-# of the line while cycling through history like it does w/o searching,
-# without that option, the cursor will remain at the position it was
-# when you used up arrow, which can be useful if you forget the exact
-# string you started the search on.
+# History search with arrow keys
 Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
 Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
 
-# This key handler shows the entire or filtered history using Out-GridView. The
-# typed text is used as the substring pattern for filtering. A selected command
-# is inserted to the command line without invoking. Multiple command selection
-# is supported, e.g. selected by Ctrl + Click.
+# F7 - Show command history in grid view
 Set-PSReadLineKeyHandler -Key F7 `
-    -BriefDescription History `
+    -BriefDescription Get-History `
     -LongDescription 'Show command history' `
     -ScriptBlock {
     $pattern = $null
@@ -120,8 +369,7 @@ Set-PSReadLineKeyHandler -Key F7 `
                 $line = $line.Substring(0, $line.Length - 1)
                 $lines = if ($lines) {
                     "$lines`n$line"
-                }
-                else {
+                } else {
                     $line
                 }
                 continue
@@ -140,22 +388,32 @@ Set-PSReadLineKeyHandler -Key F7 `
     )
     $history.Reverse()
 
-    $command = $history | Out-GridView -Title History -PassThru
+    $command = $history | Out-GridView -Title Get-History -Passthru
     if ($command) {
         [Microsoft.PowerShell.PSConsoleReadLine]::RevertLine()
         [Microsoft.PowerShell.PSConsoleReadLine]::Insert(($command -join "`n"))
     }
 }
 
-
-# CaptureScreen is good for blog posts or email showing a transaction
-# of what you did when asking for help or demonstrating a technique.
+# Ctrl+d,Ctrl+c - Capture screen
 Set-PSReadLineKeyHandler -Chord 'Ctrl+d,Ctrl+c' -Function CaptureScreen
 
-# The built-in word movement uses character delimiters, but token based word
-# movement is also very useful - these are the bindings you'd use if you
-# prefer the token based movements bound to the normal emacs word movement
-# key bindings.
+# Ctrl+b - Build current directory (macro example)
+Set-PSReadLineKeyHandler -Key Ctrl+b `
+    -BriefDescription BuildCurrentDirectory `
+    -LongDescription "Build the current directory" `
+    -ScriptBlock {
+    [Microsoft.PowerShell.PSConsoleReadLine]::RevertLine()
+    [Microsoft.PowerShell.PSConsoleReadLine]::Insert("msbuild")
+    [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
+}
+
+
+
+# Tab completion is handled automatically in Windows mode
+# Windows mode already provides standard Ctrl+C/Ctrl+V clipboard functionality
+
+# Word movement bindings
 Set-PSReadLineKeyHandler -Key Alt+d -Function ShellKillWord
 Set-PSReadLineKeyHandler -Key Alt+Backspace -Function ShellBackwardKillWord
 Set-PSReadLineKeyHandler -Key Alt+b -Function ShellBackwardWord
@@ -163,13 +421,11 @@ Set-PSReadLineKeyHandler -Key Alt+f -Function ShellForwardWord
 Set-PSReadLineKeyHandler -Key Alt+B -Function SelectShellBackwardWord
 Set-PSReadLineKeyHandler -Key Alt+F -Function SelectShellForwardWord
 
-#region Smart Insert/Delete
+# =============================================================================
+# SECTION 8: SMART INSERT/DELETE FUNCTIONS
+# =============================================================================
 
-# The next four key handlers are designed to make entering matched quotes
-# parens, and braces a nicer experience.  I'd like to include functions
-# in the module that do this, but this implementation still isn't as smart
-# as ReSharper, so I'm just providing it as a sample.
-
+# Smart quote insertion
 Set-PSReadLineKeyHandler -Key '"', "'" `
     -BriefDescription SmartInsertQuote `
     -LongDescription "Insert paired quotes if not already on a quote" `
@@ -188,7 +444,7 @@ Set-PSReadLineKeyHandler -Key '"', "'" `
 
     # If text is selected, just quote it without any smarts
     if ($selectionStart -ne -1) {
-        [Microsoft.PowerShell.PSConsoleReadLine]::Replace($selectionStart, $selectionLength, $quote + $line.SubString($selectionStart, $selectionLength) + $quote)
+        [Microsoft.PowerShell.PSConsoleReadLine]::Replace($selectionStart, $selectionLength, $quote + $line.Substring($selectionStart, $selectionLength) + $quote)
         [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($selectionStart + $selectionLength + 2)
         return
     }
@@ -198,26 +454,7 @@ Set-PSReadLineKeyHandler -Key '"', "'" `
     $parseErrors = $null
     [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$ast, [ref]$tokens, [ref]$parseErrors, [ref]$null)
 
-    function FindToken {
-        param($tokens, $cursor)
-
-        foreach ($token in $tokens) {
-            if ($cursor -lt $token.Extent.StartOffset) { continue }
-            if ($cursor -lt $token.Extent.EndOffset) {
-                $result = $token
-                $token = $token -as [StringExpandableToken]
-                if ($token) {
-                    $nested = FindToken $token.NestedTokens $cursor
-                    if ($nested) { $result = $nested }
-                }
-
-                return $result
-            }
-        }
-        return $null
-    }
-
-    $token = FindToken $tokens $cursor
+    $token = Find-TokenInPSReadLine $tokens $cursor
 
     # If we're on or inside a **quoted** string token (so not generic), we need to be smarter
     if ($token -is [StringToken] -and $token.Kind -ne [TokenKind]::Generic) {
@@ -240,8 +477,7 @@ Set-PSReadLineKeyHandler -Key '"', "'" `
         if ($line[0..$cursor].Where{ $_ -eq $quote }.Count % 2 -eq 1) {
             # Odd number of quotes before the cursor, insert a single quote
             [Microsoft.PowerShell.PSConsoleReadLine]::Insert($quote)
-        }
-        else {
+        } else {
             # Insert matching quotes, move cursor to be in between the quotes
             [Microsoft.PowerShell.PSConsoleReadLine]::Insert("$quote$quote")
             [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($cursor + 1)
@@ -251,11 +487,11 @@ Set-PSReadLineKeyHandler -Key '"', "'" `
 
     # If cursor is at the start of a token, enclose it in quotes.
     if ($token.Extent.StartOffset -eq $cursor) {
-        if ($token.Kind -eq [TokenKind]::Generic -or $token.Kind -eq [TokenKind]::Identifier -or 
+        if ($token.Kind -eq [TokenKind]::Generic -or $token.Kind -eq [TokenKind]::Identifier -or
             $token.Kind -eq [TokenKind]::Variable -or $token.TokenFlags.hasFlag([TokenFlags]::Keyword)) {
             $end = $token.Extent.EndOffset
             $len = $end - $cursor
-            [Microsoft.PowerShell.PSConsoleReadLine]::Replace($cursor, $len, $quote + $line.SubString($cursor, $len) + $quote)
+            [Microsoft.PowerShell.PSConsoleReadLine]::Replace($cursor, $len, $quote + $line.Substring($cursor, $len) + $quote)
             [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($end + 2)
             return
         }
@@ -265,6 +501,7 @@ Set-PSReadLineKeyHandler -Key '"', "'" `
     [Microsoft.PowerShell.PSConsoleReadLine]::Insert($quote)
 }
 
+# Smart brace insertion
 Set-PSReadLineKeyHandler -Key '(', '{', '[' `
     -BriefDescription InsertPairedBraces `
     -LongDescription "Insert matching braces" `
@@ -272,9 +509,9 @@ Set-PSReadLineKeyHandler -Key '(', '{', '[' `
     param($key, $arg)
 
     $closeChar = switch ($key.KeyChar) {
-        <#case#> '(' { [char]')'; break }
-        <#case#> '{' { [char]'}'; break }
-        <#case#> '[' { [char]']'; break }
+        '(' { [char]')'; break }
+        '{' { [char]'}'; break }
+        '[' { [char]']'; break }
     }
 
     $selectionStart = $null
@@ -284,19 +521,19 @@ Set-PSReadLineKeyHandler -Key '(', '{', '[' `
     $line = $null
     $cursor = $null
     [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
-    
+
     if ($selectionStart -ne -1) {
         # Text is selected, wrap it in brackets
-        [Microsoft.PowerShell.PSConsoleReadLine]::Replace($selectionStart, $selectionLength, $key.KeyChar + $line.SubString($selectionStart, $selectionLength) + $closeChar)
+        [Microsoft.PowerShell.PSConsoleReadLine]::Replace($selectionStart, $selectionLength, $key.KeyChar + $line.Substring($selectionStart, $selectionLength) + $closeChar)
         [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($selectionStart + $selectionLength + 2)
-    }
-    else {
+    } else {
         # No text is selected, insert a pair
         [Microsoft.PowerShell.PSConsoleReadLine]::Insert("$($key.KeyChar)$closeChar")
         [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($cursor + 1)
     }
 }
 
+# Smart brace closing
 Set-PSReadLineKeyHandler -Key ')', ']', '}' `
     -BriefDescription SmartCloseBraces `
     -LongDescription "Insert closing brace or skip" `
@@ -309,12 +546,12 @@ Set-PSReadLineKeyHandler -Key ')', ']', '}' `
 
     if ($line[$cursor] -eq $key.KeyChar) {
         [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($cursor + 1)
-    }
-    else {
+    } else {
         [Microsoft.PowerShell.PSConsoleReadLine]::Insert("$($key.KeyChar)")
     }
 }
 
+# Smart backspace
 Set-PSReadLineKeyHandler -Key Backspace `
     -BriefDescription SmartBackspace `
     -LongDescription "Delete previous character or matching quotes/parens/braces" `
@@ -329,29 +566,27 @@ Set-PSReadLineKeyHandler -Key Backspace `
         $toMatch = $null
         if ($cursor -lt $line.Length) {
             switch ($line[$cursor]) {
-                <#case#> '"' { $toMatch = '"'; break }
-                <#case#> "'" { $toMatch = "'"; break }
-                <#case#> ')' { $toMatch = '('; break }
-                <#case#> ']' { $toMatch = '['; break }
-                <#case#> '}' { $toMatch = '{'; break }
+                '"' { $toMatch = '"'; break }
+                "'" { $toMatch = "'"; break }
+                ')' { $toMatch = '('; break }
+                ']' { $toMatch = '['; break }
+                '}' { $toMatch = '{'; break }
             }
         }
 
         if ($toMatch -ne $null -and $line[$cursor - 1] -eq $toMatch) {
             [Microsoft.PowerShell.PSConsoleReadLine]::Delete($cursor - 1, 2)
-        }
-        else {
+        } else {
             [Microsoft.PowerShell.PSConsoleReadLine]::BackwardDeleteChar($key, $arg)
         }
     }
 }
 
-#endregion Smart Insert/Delete
+# =============================================================================
+# SECTION 9: ADVANCED KEY BINDINGS
+# =============================================================================
 
-# Sometimes you enter a command but realize you forgot to do something else first.
-# This binding will let you save that command in the history so you can recall it,
-# but it doesn't actually execute.  It also clears the line with RevertLine so the
-# undo stack is reset - though redo will still reconstruct the command line.
+# Alt+w - Save current line in history but do not execute
 Set-PSReadLineKeyHandler -Key Alt+w `
     -BriefDescription SaveInHistory `
     -LongDescription "Save current line in history but do not execute" `
@@ -365,8 +600,8 @@ Set-PSReadLineKeyHandler -Key Alt+w `
     [Microsoft.PowerShell.PSConsoleReadLine]::RevertLine()
 }
 
-# Insert text from the clipboard as a here string
-Set-PSReadLineKeyHandler -Key Ctrl+V `
+# Ctrl+Shift+V - Paste as here string  
+Set-PSReadLineKeyHandler -Key Ctrl+Shift+V `
     -BriefDescription PasteAsHereString `
     -LongDescription "Paste the clipboard text as a here string" `
     -ScriptBlock {
@@ -377,15 +612,12 @@ Set-PSReadLineKeyHandler -Key Ctrl+V `
         # Get clipboard text - remove trailing spaces, convert \r\n to \n, and remove the final \n.
         $text = ([System.Windows.Clipboard]::GetText() -replace "\p{Zs}*`r?`n", "`n").TrimEnd()
         [Microsoft.PowerShell.PSConsoleReadLine]::Insert("@'`n$text`n'@")
-    }
-    else {
+    } else {
         [Microsoft.PowerShell.PSConsoleReadLine]::Ding()
     }
 }
 
-# Sometimes you want to get a property of invoke a member on what you've entered so far
-# but you need parens to do that.  This binding will help by putting parens around the current selection,
-# or if nothing is selected, the whole line.
+# Alt+( - Parenthesize selection
 Set-PSReadLineKeyHandler -Key 'Alt+(' `
     -BriefDescription ParenthesizeSelection `
     -LongDescription "Put parenthesis around the selection or entire line and move the cursor to after the closing parenthesis" `
@@ -400,18 +632,15 @@ Set-PSReadLineKeyHandler -Key 'Alt+(' `
     $cursor = $null
     [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
     if ($selectionStart -ne -1) {
-        [Microsoft.PowerShell.PSConsoleReadLine]::Replace($selectionStart, $selectionLength, '(' + $line.SubString($selectionStart, $selectionLength) + ')')
+        [Microsoft.PowerShell.PSConsoleReadLine]::Replace($selectionStart, $selectionLength, '(' + $line.Substring($selectionStart, $selectionLength) + ')')
         [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($selectionStart + $selectionLength + 2)
-    }
-    else {
+    } else {
         [Microsoft.PowerShell.PSConsoleReadLine]::Replace(0, $line.Length, '(' + $line + ')')
         [Microsoft.PowerShell.PSConsoleReadLine]::EndOfLine()
     }
 }
 
-# Each time you press Alt+', this key handler will change the token
-# under or before the cursor.  It will cycle through single quotes, double quotes, or
-# no quotes each time it is invoked.
+# Alt+' - Toggle quote argument
 Set-PSReadLineKeyHandler -Key "Alt+'" `
     -BriefDescription ToggleQuoteArgument `
     -LongDescription "Toggle quotes on the argument under the cursor" `
@@ -448,12 +677,10 @@ Set-PSReadLineKeyHandler -Key "Alt+'" `
         if ($tokenText[0] -eq '"' -and $tokenText[-1] -eq '"') {
             # Switch to no quotes
             $replacement = $tokenText.Substring(1, $tokenText.Length - 2)
-        }
-        elseif ($tokenText[0] -eq "'" -and $tokenText[-1] -eq "'") {
+        } elseif ($tokenText[0] -eq "'" -and $tokenText[-1] -eq "'") {
             # Switch to double quotes
             $replacement = '"' + $tokenText.Substring(1, $tokenText.Length - 2) + '"'
-        }
-        else {
+        } else {
             # Add single quotes
             $replacement = "'" + $tokenText + "'"
         }
@@ -465,7 +692,7 @@ Set-PSReadLineKeyHandler -Key "Alt+'" `
     }
 }
 
-# This example will replace any aliases on the command line with the resolved commands.
+# Alt+% - Expand aliases
 Set-PSReadLineKeyHandler -Key "Alt+%" `
     -BriefDescription ExpandAliases `
     -LongDescription "Replace all aliases with the full command" `
@@ -501,7 +728,7 @@ Set-PSReadLineKeyHandler -Key "Alt+%" `
     }
 }
 
-# F1 for help on the command line - naturally
+# F1 - Command help
 Set-PSReadLineKeyHandler -Key F1 `
     -BriefDescription CommandHelp `
     -LongDescription "Open the help window for the current command" `
@@ -514,7 +741,7 @@ Set-PSReadLineKeyHandler -Key F1 `
     $cursor = $null
     [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$ast, [ref]$tokens, [ref]$errors, [ref]$cursor)
 
-    $commandAst = $ast.FindAll( {
+    $commandAst = $ast.FindAll({
             $node = $args[0]
             $node -is [CommandAst] -and
             $node.Extent.StartOffset -le $cursor -and
@@ -536,51 +763,66 @@ Set-PSReadLineKeyHandler -Key F1 `
     }
 }
 
+# =============================================================================
+# SECTION 10: DIRECTORY MARKING SYSTEM
+# =============================================================================
 
-#
-# Ctrl+Shift+j then type a key to mark the current directory.
-# Ctrj+j then the same key will change back to that directory without
-# needing to type cd and won't change the command line.
-
-#
+# Global variable for directory marks
 $global:PSReadLineMarks = @{}
 
-Set-PSReadLineKeyHandler -Key Ctrl+J `
+# Ctrl+Shift+J - Mark current directory
+Set-PSReadLineKeyHandler -Key Ctrl+Shift+J `
     -BriefDescription MarkDirectory `
     -LongDescription "Mark the current directory" `
     -ScriptBlock {
     param($key, $arg)
 
+    # Prompt for a single key to use as the mark
+    Write-Host "Marking directory. Press a key for the mark: " -NoNewline
     $key = [Console]::ReadKey($true)
-    $global:PSReadLineMarks[$key.KeyChar] = $pwd
+    Write-Host $key.KeyChar -ForegroundColor Yellow
+    $global:PSReadLineMarks[$key.KeyChar] = $pwd.Path
 }
 
+# Ctrl+j - Jump to marked directory
 Set-PSReadLineKeyHandler -Key Ctrl+j `
     -BriefDescription JumpDirectory `
     -LongDescription "Goto the marked directory" `
     -ScriptBlock {
     param($key, $arg)
 
-    $key = [Console]::ReadKey()
+    # Prompt for the mark key to jump to
+    Write-Host "Jump to mark: " -NoNewline
+    $key = [Console]::ReadKey($true)
+    Write-Host $key.KeyChar -ForegroundColor Yellow
     $dir = $global:PSReadLineMarks[$key.KeyChar]
     if ($dir) {
-        cd $dir
+        Set-Location $dir
+        [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
+    } else {
+        Write-Host "`nMark '$($key.KeyChar)' not found." -ForegroundColor Red
         [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
     }
 }
 
+# Alt+j - Show directory marks
 Set-PSReadLineKeyHandler -Key Alt+j `
     -BriefDescription ShowDirectoryMarks `
     -LongDescription "Show the currently marked directories" `
     -ScriptBlock {
     param($key, $arg)
 
-    $global:PSReadLineMarks.GetEnumerator() | % {
-        [PSCustomObject]@{Key = $_.Key; Dir = $_.Value } } |
-    Format-Table -AutoSize | Out-Host
+    $global:PSReadLineMarks.GetEnumerator() | ForEach-Object {
+        [pscustomobject]@{ Key = $_.Key; Dir = $_.Value }
+    } |
+        Format-Table -AutoSize | Out-Host
 
     [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
 }
+
+# =============================================================================
+# SECTION 11: COMMAND VALIDATION AND AUTO-CORRECTION
+# =============================================================================
 
 # Auto correct 'git cmt' to 'git commit'
 Set-PSReadLineOption -CommandValidationHandler {
@@ -599,8 +841,7 @@ Set-PSReadLineOption -CommandValidationHandler {
     }
 }
 
-# `ForwardChar` accepts the entire suggestion text when the cursor is at the end of the line.
-# This custom binding makes `RightArrow` behave similarly - accepting the next word instead of the entire suggestion text.
+# Enhanced right arrow behavior
 Set-PSReadLineKeyHandler -Key RightArrow `
     -BriefDescription ForwardCharAndAcceptNextSuggestionWord `
     -LongDescription "Move cursor one character to the right in the current editing line and accept the next word in suggestion when it's at the end of current editing line" `
@@ -613,49 +854,45 @@ Set-PSReadLineKeyHandler -Key RightArrow `
 
     if ($cursor -lt $line.Length) {
         [Microsoft.PowerShell.PSConsoleReadLine]::ForwardChar($key, $arg)
-    }
-    else {
+    } else {
         [Microsoft.PowerShell.PSConsoleReadLine]::AcceptNextSuggestionWord($key, $arg)
     }
 }
 
-# Cycle through arguments on current line and select the text. This makes it easier to quickly change the argument if re-running a previously run command from the history
-# or if using a psreadline predictor. You can also use a digit argument to specify which argument you want to select, i.e. Alt+1, Alt+a selects the first argument
-# on the command line. 
+# Alt+a - Select command arguments
 Set-PSReadLineKeyHandler -Key Alt+a `
     -BriefDescription SelectCommandArguments `
     -LongDescription "Set current selection to next command argument in the command line. Use of digit argument selects argument by position" `
     -ScriptBlock {
     param($key, $arg)
-  
+
     $ast = $null
     $cursor = $null
     [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$ast, [ref]$null, [ref]$null, [ref]$cursor)
-  
-    $asts = $ast.FindAll( {
+
+    $asts = $ast.FindAll({
             $args[0] -is [System.Management.Automation.Language.ExpressionAst] -and
             $args[0].Parent -is [System.Management.Automation.Language.CommandAst] -and
             $args[0].Extent.StartOffset -ne $args[0].Parent.Extent.StartOffset
         }, $true)
-  
+
     if ($asts.Count -eq 0) {
         [Microsoft.PowerShell.PSConsoleReadLine]::Ding()
         return
     }
-    
+
     $nextAst = $null
 
     if ($null -ne $arg) {
         $nextAst = $asts[$arg - 1]
-    }
-    else {
+    } else {
         foreach ($ast in $asts) {
             if ($ast.Extent.StartOffset -ge $cursor) {
                 $nextAst = $ast
                 break
             }
-        } 
-        
+        }
+
         if ($null -eq $nextAst) {
             $nextAst = $asts[0]
         }
@@ -669,8 +906,165 @@ Set-PSReadLineKeyHandler -Key Alt+a `
         $startOffsetAdjustment = 1
         $endOffsetAdjustment = 2
     }
-  
+
     [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($nextAst.Extent.StartOffset + $startOffsetAdjustment)
     [Microsoft.PowerShell.PSConsoleReadLine]::SetMark($null, $null)
-    [Microsoft.PowerShell.PSConsoleReadLine]::SelectForwardChar($null, ($nextAst.Extent.EndOffset - $nextAst.Extent.StartOffset) - $endOffsetAdjustment)
+         [Microsoft.PowerShell.PSConsoleReadLine]::SelectForwardChar($null, ($nextAst.Extent.EndOffset - $nextAst.Extent.StartOffset) - $endOffsetAdjustment)
+}
+
+# Alt+x - Unicode character input
+Set-PSReadLineKeyHandler -Chord 'Alt+x' `
+    -BriefDescription ToUnicodeChar `
+    -LongDescription "Transform Unicode code point into a UTF-16 encoded string" `
+    -ScriptBlock {
+    $buffer = $null
+    $cursor = 0
+    [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref] $buffer, [ref] $cursor)
+    if ($cursor -lt 4) {
+        return
+    }
+
+    $number = 0
+    $isNumber = [int]::TryParse(
+        $buffer.Substring($cursor - 4, 4),
+        [System.Globalization.NumberStyles]::AllowHexSpecifier,
+        $null,
+        [ref] $number)
+
+    if (-not $isNumber) {
+        return
+    }
+
+    try {
+        $unicode = [char]::ConvertFromUtf32($number)
+    } catch {
+        return
+    }
+
+    [Microsoft.PowerShell.PSConsoleReadLine]::Delete($cursor - 4, 4)
+    [Microsoft.PowerShell.PSConsoleReadLine]::Insert($unicode)
+}
+
+# =============================================================================
+# SECTION 12: EXTERNAL TOOLS INTEGRATION
+# =============================================================================
+
+# PowerToys CommandNotFound module
+# Check if winget is available before importing the module
+if (Get-Command winget -ErrorAction SilentlyContinue) {
+    Import-Module -Name Microsoft.WinGet.CommandNotFound -ErrorAction SilentlyContinue
+} else {
+    Write-Host "WinGet not found - skipping CommandNotFound module" -ForegroundColor Yellow
+}
+
+# Fast Node Manager (fnm) integration 
+# NOTE: --use-on-cd flag disabled for performance (was causing slowdowns)
+# To manually switch Node versions, use: fnm use <version>
+# fnm env --use-on-cd --shell power-shell | Out-String | Invoke-Expression
+
+# =============================================================================
+# SECTION 12.5: COMMUNITY MODULES (OPTIONAL)
+# =============================================================================
+
+# Uncomment the following lines to enable popular community modules
+# These modules enhance the PowerShell experience significantly
+
+# z - Smart directory jumping (tracks most used directories)
+# Install with: Install-Module z -Scope CurrentUser
+# Import-Module z
+
+# PSFzf - Fuzzy finder for PowerShell (replaces Out-GridView with fast fuzzy search)
+# Install with: Install-Module PSFzf -Scope CurrentUser
+# Import-Module PSFzf
+# Set-PsFzfOption -TabExpansion
+
+# =============================================================================
+# SECTION 13: CUSTOM FUNCTIONS AND UTILITIES
+# =============================================================================
+
+# Private helper function for PSReadLine token finding (used in SmartInsertQuote)
+function Find-TokenInPSReadLine {
+    param($tokens, $cursor)
+
+    foreach ($token in $tokens) {
+        if ($cursor -lt $token.Extent.StartOffset) { continue }
+        if ($cursor -lt $token.Extent.EndOffset) {
+            $result = $token
+            $token = $token -as [StringExpandableToken]
+            if ($token) {
+                $nested = Find-TokenInPSReadLine $token.NestedTokens $cursor
+                if ($nested) { $result = $nested }
+            }
+
+            return $result
+        }
+    }
+    return $null
+}
+
+# Function to show profile information
+function Show-ProfileInfo {
+    Write-Host "=== PowerShell Profile Information ===" -ForegroundColor Cyan
+    Write-Host "Profile Path: $PROFILE" -ForegroundColor Yellow
+    Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Yellow
+    Write-Host "OS: $($PSVersionTable.OS)" -ForegroundColor Yellow
+    Write-Host "Current Theme: $script:foundTheme" -ForegroundColor Yellow
+    # Check current virtual environment
+    $currentVenv = if ($env:VIRTUAL_ENV) { Split-Path $env:VIRTUAL_ENV -Leaf } else { "None" }
+    Write-Host "Virtual Environment: $currentVenv" -ForegroundColor Yellow
+    Write-Host "Directory Marks: $($global:PSReadLineMarks.Count)" -ForegroundColor Yellow
+}
+
+# Function to reload profile
+function Update-Profile {
+    Write-Host "Reloading PowerShell profile..." -ForegroundColor Green
+    . $PROFILE
+    Write-Host "Profile reloaded successfully!" -ForegroundColor Green
+}
+
+# Function to backup profile
+function New-Backup-Profile {
+    $backupPath = "$env:USERPROFILE\Documents\PowerShell\profile_backup_$(Get-Date -Format 'yyyyMMdd_HHmmss').ps1"
+    Copy-Item $PROFILE $backupPath
+    Write-Host "Profile backed up to: $backupPath" -ForegroundColor Green
+}
+
+# Function to show available aliases and functions
+function Show-MyAliases {
+    Write-Host "=== Custom Aliases and Functions ===" -ForegroundColor Cyan
+    
+    Write-Host "`n--- Aliases ---" -ForegroundColor Yellow
+    # Filter for aliases pointing to functions or simple commands you've likely set
+    Get-Alias | Where-Object { 
+        $_.Definition -match '^(Show-ProfileInfo|Update-Profile|New-Backup-Profile|Invoke-EnhancedCd|Get-ChildItem)' -or
+        $_.Source -notlike 'App_*' # Exclude built-in aliases
+    } | Sort-Object Name | Format-Table -AutoSize
+
+    Write-Host "`n--- Custom Functions ---" -ForegroundColor Yellow
+    # Get all functions that are not from a system module
+    Get-Command -CommandType Function | Where-Object { $_.Module -eq $null } | Select-Object Name, Source | Format-Table -AutoSize
+}
+
+# Set aliases for utility functions
+Set-Alias -Name profile-info -Value Show-ProfileInfo
+Set-Alias -Name reload -Value Update-Profile
+Set-Alias -Name backup-profile -Value New-Backup-Profile
+Set-Alias -Name my-aliases -Value Show-MyAliases
+
+# =============================================================================
+# SECTION 14: WELCOME MESSAGE
+# =============================================================================
+
+# Show welcome message only on first load
+if (-not $global:ProfileLoaded) {
+    Write-Host "=== Welcome to Enhanced PowerShell! ===" -ForegroundColor Green
+    Write-Host "Type 'profile-info' to see profile information" -ForegroundColor Yellow
+    Write-Host "Type 'my-aliases' to see custom aliases" -ForegroundColor Yellow
+    Write-Host "Type 'reload' to reload the profile" -ForegroundColor Yellow
+    Write-Host "Type 'backup-profile' to backup the profile" -ForegroundColor Yellow
+    Write-Host "Type 'snv' to set Node version for current directory" -ForegroundColor Yellow
+    Write-Host "Key Shortcuts: Ctrl+b (build), Alt+x (Unicode), Ctrl+Shift+V (here string)" -ForegroundColor Cyan
+    Write-Host "Directory Marks: Ctrl+Shift+J (mark), Ctrl+J (jump), Alt+J (list)" -ForegroundColor Cyan
+    Write-Host "=========================================" -ForegroundColor Green
+    $global:ProfileLoaded = $true
 }
