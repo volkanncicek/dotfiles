@@ -104,21 +104,58 @@ using namespace System.Management.Automation
 using namespace System.Management.Automation.Language
 
 # =============================================================================
-# SECTION 1: AUTOMATIC ENVIRONMENT REFRESH
+# SECTION 1: SECURITY AND PREREQUISITES CHECK
+# =============================================================================
+
+# Check PowerShell version compatibility
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Warning "This profile is optimized for PowerShell 7+. Some features may not work properly."
+}
+
+# Check execution policy (but don't force change)
+$executionPolicy = Get-ExecutionPolicy
+if ($executionPolicy -eq 'Restricted') {
+    Write-Host "Execution Policy is Restricted. Some features may not work. Consider running:" -ForegroundColor Yellow
+    Write-Host "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
+}
+
+# =============================================================================
+# SECTION 2: AUTOMATIC ENVIRONMENT REFRESH
 # =============================================================================
 
 # Auto-refresh environment variables on profile load (VS Code PATH fix)
 try {
     $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath"
-    Write-Host "Environment variables refreshed automatically" -ForegroundColor Green
+    if ($machinePath -and $userPath) {
+        $env:Path = "$machinePath;$userPath"
+        Write-Host "Environment variables refreshed automatically" -ForegroundColor Green
+    }
 } catch {
     Write-Host "Failed to refresh environment variables: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
 # =============================================================================
-# SECTION 2: VISUAL ENHANCEMENTS
+# SECTION 3: MODULE LOADING AND CONFIGURATION
+# =============================================================================
+
+# PSReadLine: For better command history and auto-completion
+Import-Module PSReadLine
+
+Set-PSReadLineOption -PredictionSource History
+Set-PSReadLineOption -PredictionViewStyle ListView
+Set-PSReadLineOption -EditMode Windows
+Set-PSReadLineOption -HistorySearchCursorMovesToEnd
+
+
+# Terminal Icons: For better file/folder visualization
+Import-Module -Name Terminal-Icons
+
+# PowerToys CommandNotFound: For better command not found error messages
+Import-Module -Name Microsoft.WinGet.CommandNotFound
+
+# =============================================================================
+# SECTION 4: OH-MY-POSH THEME CONFIGURATION
 # =============================================================================
 
 # Oh-My-Posh Theme Configuration
@@ -181,23 +218,8 @@ try {
     }
 }
 
-# Terminal Icons for better file/folder visualization
-Import-Module -Name Terminal-Icons
-
 # =============================================================================
-# SECTION 3: PSREADLINE CONFIGURATION
-# =============================================================================
-
-Import-Module PSReadLine
-
-# Basic PSReadLine settings
-Set-PSReadLineOption -PredictionSource History
-Set-PSReadLineOption -PredictionViewStyle ListView
-Set-PSReadLineOption -EditMode Windows
-Set-PSReadLineOption -HistorySearchCursorMovesToEnd
-
-# =============================================================================
-# SECTION 4: ALIASES AND SHORTCUTS
+# SECTION 5: ALIASES AND SHORTCUTS
 # =============================================================================
 
 # Basic aliases
@@ -256,7 +278,7 @@ function h { Get-History }
 function hc { Clear-History }
 
 # =============================================================================
-# SECTION 5: ENVIRONMENT MANAGEMENT (VENV & NODE)
+# SECTION 6: ENVIRONMENT MANAGEMENT (VENV & NODE)
 # =============================================================================
 
 # A single, reusable function to activate a Python virtual environment if found.
@@ -328,7 +350,7 @@ function Set-NodeVersion {
 Set-Alias snv Set-NodeVersion
 
 # =============================================================================
-# SECTION 6: WINGET COMPLETION
+# SECTION 7: AUTO-COMPLETION REGISTRATIONS
 # =============================================================================
 
 # Register winget completion
@@ -342,8 +364,20 @@ Register-ArgumentCompleter -Native -CommandName winget -ScriptBlock {
     }
 }
 
+# Docker completion (if Docker is available)
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+    Register-ArgumentCompleter -Native -CommandName docker -ScriptBlock {
+        param($wordToComplete, $commandAst, $cursorPosition)
+        try {
+            docker completion powershell | Invoke-Expression
+        } catch {
+            # Fallback to basic completion
+        }
+    }
+}
+
 # =============================================================================
-# SECTION 7: KEY BINDINGS AND SHORTCUTS
+# SECTION 8: KEY BINDINGS AND SHORTCUTS
 # =============================================================================
 
 # History search with arrow keys
@@ -422,7 +456,7 @@ Set-PSReadLineKeyHandler -Key Alt+B -Function SelectShellBackwardWord
 Set-PSReadLineKeyHandler -Key Alt+F -Function SelectShellForwardWord
 
 # =============================================================================
-# SECTION 8: SMART INSERT/DELETE FUNCTIONS
+# SECTION 9: SMART INSERT/DELETE FUNCTIONS
 # =============================================================================
 
 # Smart quote insertion
@@ -583,7 +617,7 @@ Set-PSReadLineKeyHandler -Key Backspace `
 }
 
 # =============================================================================
-# SECTION 9: ADVANCED KEY BINDINGS
+# SECTION 10: ADVANCED KEY BINDINGS
 # =============================================================================
 
 # Alt+w - Save current line in history but do not execute
@@ -764,7 +798,7 @@ Set-PSReadLineKeyHandler -Key F1 `
 }
 
 # =============================================================================
-# SECTION 10: DIRECTORY MARKING SYSTEM
+# SECTION 11: DIRECTORY MARKING SYSTEM
 # =============================================================================
 
 # Global variable for directory marks
@@ -821,7 +855,7 @@ Set-PSReadLineKeyHandler -Key Alt+j `
 }
 
 # =============================================================================
-# SECTION 11: COMMAND VALIDATION AND AUTO-CORRECTION
+# SECTION 12: COMMAND VALIDATION AND AUTO-CORRECTION
 # =============================================================================
 
 # Auto correct 'git cmt' to 'git commit'
@@ -946,16 +980,10 @@ Set-PSReadLineKeyHandler -Chord 'Alt+x' `
 }
 
 # =============================================================================
-# SECTION 12: EXTERNAL TOOLS INTEGRATION
+# SECTION 13: EXTERNAL TOOLS INTEGRATION
 # =============================================================================
 
-# PowerToys CommandNotFound module
-# Check if winget is available before importing the module
-if (Get-Command winget -ErrorAction SilentlyContinue) {
-    Import-Module -Name Microsoft.WinGet.CommandNotFound -ErrorAction SilentlyContinue
-} else {
-    Write-Host "WinGet not found - skipping CommandNotFound module" -ForegroundColor Yellow
-}
+
 
 # Fast Node Manager (fnm) integration 
 # NOTE: --use-on-cd flag disabled for performance (was causing slowdowns)
@@ -963,7 +991,7 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
 # fnm env --use-on-cd --shell power-shell | Out-String | Invoke-Expression
 
 # =============================================================================
-# SECTION 12.5: COMMUNITY MODULES (OPTIONAL)
+# SECTION 13.5: COMMUNITY MODULES (OPTIONAL)
 # =============================================================================
 
 # Uncomment the following lines to enable popular community modules
@@ -979,7 +1007,7 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
 # Set-PsFzfOption -TabExpansion
 
 # =============================================================================
-# SECTION 13: CUSTOM FUNCTIONS AND UTILITIES
+# SECTION 14: CUSTOM FUNCTIONS AND UTILITIES
 # =============================================================================
 
 # Private helper function for PSReadLine token finding (used in SmartInsertQuote)
@@ -1052,7 +1080,7 @@ Set-Alias -Name backup-profile -Value New-Backup-Profile
 Set-Alias -Name my-aliases -Value Show-MyAliases
 
 # =============================================================================
-# SECTION 14: WELCOME MESSAGE
+# SECTION 15: WELCOME MESSAGE
 # =============================================================================
 
 # Show welcome message only on first load
