@@ -572,14 +572,15 @@ Set-PSReadLineKeyHandler -Key '"', "'" `
     [Microsoft.PowerShell.PSConsoleReadLine]::Insert($quote)
 }
 
-# Smart brace insertion
+# Enhanced Smart Brace Insertion with Paste Mode Support
 Set-PSReadLineKeyHandler -Key '(', '{', '[' `
     -BriefDescription InsertPairedBraces `
-    -LongDescription "Insert matching braces" `
+    -LongDescription "Insert matching braces with paste mode detection" `
     -ScriptBlock {
     param($key, $arg)
 
-    $closeChar = switch ($key.KeyChar) {
+    $openChar = $key.KeyChar
+    $closeChar = switch ($openChar) {
         '(' { [char]')'; break }
         '{' { [char]'}'; break }
         '[' { [char]']'; break }
@@ -593,21 +594,47 @@ Set-PSReadLineKeyHandler -Key '(', '{', '[' `
     $cursor = $null
     [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
 
-    if ($selectionStart -ne -1) {
-        # Text is selected, wrap it in brackets
-        [Microsoft.PowerShell.PSConsoleReadLine]::Replace($selectionStart, $selectionLength, $key.KeyChar + $line.Substring($selectionStart, $selectionLength) + $closeChar)
-        [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($selectionStart + $selectionLength + 2)
-    } else {
-        # No text is selected, insert a pair
-        [Microsoft.PowerShell.PSConsoleReadLine]::Insert("$($key.KeyChar)$closeChar")
-        [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($cursor + 1)
+    # Check if we're in paste mode (recently pasted content)
+    $isPasteMode = $false
+    if ($global:LastPasteTime -and (Get-Date) -lt $global:LastPasteTime.AddSeconds(2)) {
+        $isPasteMode = $true
     }
+
+    # If text is selected, wrap it in brackets
+    if ($selectionStart -ne -1) {
+        [Microsoft.PowerShell.PSConsoleReadLine]::Replace($selectionStart, $selectionLength, $openChar + $line.Substring($selectionStart, $selectionLength) + $closeChar)
+        [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($selectionStart + $selectionLength + 2)
+        return
+    }
+
+    # If in paste mode, just insert the opening brace without smart features
+    if ($isPasteMode) {
+        [Microsoft.PowerShell.PSConsoleReadLine]::Insert($openChar)
+        return
+    }
+
+    # Check if we're at the end of a line (common when pasting)
+    if ($cursor -eq $line.Length) {
+        # Simple insertion for end-of-line
+        [Microsoft.PowerShell.PSConsoleReadLine]::Insert($openChar)
+        return
+    }
+
+    # Check if the next character is already the matching close brace (common in pasted code)
+    if ($cursor -lt $line.Length -and $line[$cursor] -eq $closeChar) {
+        [Microsoft.PowerShell.PSConsoleReadLine]::Insert($openChar)
+        return
+    }
+
+    # Default smart behavior: insert a pair and position cursor between them
+    [Microsoft.PowerShell.PSConsoleReadLine]::Insert("$openChar$closeChar")
+    [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($cursor + 1)
 }
 
-# Smart brace closing
+# Enhanced Smart Brace Closing with Paste Mode Support
 Set-PSReadLineKeyHandler -Key ')', ']', '}' `
     -BriefDescription SmartCloseBraces `
-    -LongDescription "Insert closing brace or skip" `
+    -LongDescription "Insert closing brace or skip with paste mode detection" `
     -ScriptBlock {
     param($key, $arg)
 
@@ -615,7 +642,20 @@ Set-PSReadLineKeyHandler -Key ')', ']', '}' `
     $cursor = $null
     [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
 
-    if ($line[$cursor] -eq $key.KeyChar) {
+    # Check if we're in paste mode (recently pasted content)
+    $isPasteMode = $false
+    if ($global:LastPasteTime -and (Get-Date) -lt $global:LastPasteTime.AddSeconds(2)) {
+        $isPasteMode = $true
+    }
+
+    # If in paste mode, just insert the closing brace without smart features
+    if ($isPasteMode) {
+        [Microsoft.PowerShell.PSConsoleReadLine]::Insert("$($key.KeyChar)")
+        return
+    }
+
+    # Default smart behavior: skip if next char matches, otherwise insert
+    if ($cursor -lt $line.Length -and $line[$cursor] -eq $key.KeyChar) {
         [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($cursor + 1)
     } else {
         [Microsoft.PowerShell.PSConsoleReadLine]::Insert("$($key.KeyChar)")
